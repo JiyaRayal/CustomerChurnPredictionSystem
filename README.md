@@ -1,118 +1,133 @@
-# Customer Churn Prediction System
+# Customer Segmentation & Churn Pattern Analytics in European Banking
 
-A modular, end-to-end machine-learning project for churn analysis and decision support.
+A segmentation-driven analysis of customer churn for a Unified Mentor internship project.
+It measures overall churn, compares churn across customer segments, identifies high-risk
+and high-balance segments, and will deliver an interactive dashboard, a research paper
+and an executive summary.
 
-## Dataset included
+> **Important:** the dataset's provenance is unconfirmed. This project does **not** claim
+> the data is official European Central Bank data. All findings are descriptive
+> associations in a single snapshot, not causal effects.
 
-`data/customer-churn-dataset-testing-master.csv`
+## Project status
 
-The project was prepared using the uploaded CSV. Initial inspection found **64,374 rows and 12 columns**, with `Churn` encoded as 0/1, no missing values, and no exact duplicate rows. `CustomerID` is excluded from model features. Re-run `python inspect_dataset.py` to verify the copy on your machine before training.
+| Phase | Content | Status |
+|---|---|---|
+| 0 | Dataset inspection | Done |
+| 1 | Project scaffold, config, documentation | Done |
+| 2 | Data ingestion, validation, cleaning, derived segments, Geography x zero-balance investigation | Done |
+| 3 | KPI module (6 KPIs + balance exposure proxy) and KPI summary report | Done |
+| 4 | Segment churn analysis, report and six charts | Done |
+| 5 | **High-balance, salary, engagement, tenure and balance-exposure analysis, report and six charts** | **Done (awaiting review)** |
+| 6 | Streamlit dashboard | Not started |
+| 7 | Research paper and executive summary | Not started |
+| 8 | QA and packaging | Not started |
 
-## 1. Open in VS Code (Windows CMD)
+Not built yet: the Streamlit dashboard, research paper and executive summary.
+Modules marked *placeholder* contain only a description of their planned purpose.
 
-Extract this folder, then in VS Code choose **File → Open Folder** and select `CustomerChurnPredictionSystem`.
+## Repository layout
 
-Open Terminal → New Terminal. Ensure the terminal is in the project root. If your existing `.venv` is in this folder, activate it:
-
-```bat
-.venv\Scripts\activate.bat
 ```
-
-If no environment exists, create one:
-
-```bat
-py -3.12 -m venv .venv
-.venv\Scripts\activate.bat
-```
-
-Install dependencies using the official PyPI index:
-
-```bat
-python -m pip install -r requirements.txt --index-url https://pypi.org/simple/ --default-timeout=120 --retries=5
-```
-
-## 2. Verify and inspect
-
-```bat
-python -c "import pandas, numpy, matplotlib, seaborn, sklearn, streamlit, joblib; print('All libraries installed successfully!')"
-python inspect_dataset.py
-```
-
-## 3. Run exploratory analysis
-
-```bat
-python -m src.eda
-```
-
-Outputs are saved under `reports/` and `reports/figures/`. Charts and summaries are generated from the actual CSV at runtime.
-
-## 4. Train and compare models
-
-```bat
-python train_model.py
-```
-
-This uses a stratified 80/20 train-test split and a scikit-learn `Pipeline` with imputation, one-hot encoding, and scaling fitted only on training data. It compares Logistic Regression, Random Forest, Linear SVM, and KNN using accuracy, precision, recall, F1, and ROC-AUC. Confusion matrices and comparison results are saved/printed.
-
-**Runtime note:** SVM can be slow on tens of thousands of rows. To keep this beginner-friendly on a normal laptop, the script trains its SVM baseline on a stratified subset (default 12,000 rows), while evaluation uses the same held-out test set. Other models use the full training set. This difference must be mentioned when interpreting the comparison.
-
-The best baseline is selected using validation F1 (validation ROC-AUC breaks ties), not the held-out test scores. Each candidate is then evaluated on the same untouched test split. The saved selected model is refit on the full development split.
-
-## 5. Launch the Streamlit app
-
-```bat
-streamlit run app.py
-```
-
-The app supports:
-- Individual customer prediction
-- Batch predictions from CSV
-- Churn score and low/medium/high risk categories
-- Rule-based retention suggestions
-- Model metadata and evaluation metrics
-
-If the selected model is Linear SVM, its score is **not a calibrated probability**. The app clearly labels the mapped score as approximate. Prefer a probability-producing model if calibrated probabilities are required.
-
-## 6. Hyperparameter tuning (optional, may take time)
-
-```bat
-python tune_model.py
-```
-
-This runs a small `RandomizedSearchCV` experiment for Random Forest with stratified cross-validation. It writes `reports/tuning_results.json`; it does not silently overwrite the baseline app model.
-
-## 7. Tests
-
-```bat
-python -m pytest
-```
-
-## Project structure
-
-```text
-CustomerChurnPredictionSystem/
-├── app.py
-├── inspect_dataset.py
-├── train_model.py
-├── tune_model.py
-├── requirements.txt
-├── config.json
+churn-analytics-project/
+├── config/segmentation.toml     # ALL thresholds, schema and statistical settings (single source of truth)
 ├── data/
-│   └── customer-churn-dataset-testing-master.csv
-├── src/
-│   ├── __init__.py
-│   ├── common.py
-│   └── eda.py
-├── artifacts/            # trained model generated after training
-├── reports/              # EDA/model results generated at runtime
-└── tests/
-    └── test_project.py
+│   ├── raw/                     # original CSV (read-only) + SHA256SUMS fingerprint
+│   └── processed/               # generated: customers_segmented.csv, segmentation_metadata.json
+├── docs/
+│   ├── code_guide.md            # beginner-friendly explanation of how the code fits together
+│   ├── kpi_definitions.md       # exact formula, numerator, denominator, empty-group rule per KPI
+│   ├── analysis_methods.md      # measures and rules used in the segment analysis
+│   ├── balance_engagement_methods.md # measures and rules used in the Phase 5 analysis
+│   ├── segmentation_rules.md    # every segment boundary explained
+│   ├── data_provenance.md       # what is and is not known about the data
+│   ├── decisions_log.md         # each decision and its status
+│   └── source/project_brief.txt # the official requirements, as supplied
+├── src/churn_analytics/
+│   ├── config.py                # loads and validates the config
+│   ├── data_loader.py           # checksum-verified loading of raw data; reloading processed data
+│   ├── validation.py            # data-quality checks -> validation report
+│   ├── cleaning.py              # documented cleaning decisions (no silent changes)
+│   ├── segmentation.py          # age / credit / tenure / balance segments from config thresholds
+│   ├── geography_balance.py     # Geography x zero-balance investigation
+│   ├── stats_utils.py           # Wilson interval, group-size rules, chi-square
+│   ├── md_utils.py              # Markdown helpers for reports
+│   ├── kpis.py                  # KPI functions (formulas in docs/kpi_definitions.md)
+│   ├── kpi_report.py            # headline KPI summary -> reports/kpi_summary.md
+│   ├── analysis.py              # segment churn analysis (rates, contributions, Cramer's V, drill-downs, profiles)
+│   ├── analysis_report.py       # -> reports/segment_churn_analysis.md
+│   ├── balance_engagement.py    # high-balance, salary, engagement, tenure, balance exposure proxy
+│   ├── balance_engagement_report.py # -> reports/high_balance_engagement_analysis.md
+│   ├── visualization.py         # twelve report charts (plotting libraries imported lazily)
+│   ├── pipeline.py              # runs the whole flow and writes outputs
+├── scripts/run_pipeline.py      # one-command runner (data, tables, reports)
+├── scripts/make_figures.py      # draws the charts into reports/figures/ (needs Matplotlib + Seaborn)
+├── app/streamlit_app.py         # placeholder (Phase 6)
+├── tests/                       # unit and end-to-end tests
+├── reports/
+│   ├── validation_report.md                    # generated
+│   ├── cleaning_log.md                         # generated
+│   ├── geography_zero_balance_investigation.md # generated
+│   ├── kpi_summary.md                          # generated
+│   ├── segment_churn_analysis.md               # generated
+│   ├── high_balance_engagement_analysis.md     # generated
+│   ├── figures/                                # generated charts (PNG)
+│   └── tables/                                 # generated CSV tables
+├── requirements.txt / requirements-dev.txt
+└── pytest.ini
 ```
 
-## Important limitations
+## Setup
 
-- Predictions reflect patterns in this historical dataset; they are not guarantees about future behavior.
-- Risk cutoffs are configurable defaults, not empirically optimized business thresholds.
-- Rule-based recommendations are examples, not causal explanations.
-- Review class-specific recall, precision, false negatives, calibration, fairness, and business costs before deployment.
-- No scores are hard-coded. Evaluation reports are generated by running the training scripts.
+Requires **Python 3.11 or newer** (the config loader uses the built-in `tomllib`).
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+```
+
+Place `European_Bank.csv` in `data/raw/` if it is not there (the CSV is git-ignored by
+default; see `data/README.md`), then verify it and run the tests:
+
+```bash
+cd data/raw && sha256sum -c SHA256SUMS && cd ../..
+pytest                              # run the tests
+python scripts/run_pipeline.py      # verify -> validate -> clean/segment -> investigate -> KPIs -> write reports
+```
+
+To draw the charts (optional; needs Matplotlib and Seaborn):
+
+```bash
+python scripts/make_figures.py
+```
+
+The pipeline writes only to `data/processed/` and `reports/`. It stops immediately if the raw
+file's checksum does not match, or if validation finds a FAIL-level problem (the validation
+report is still written so you can see why).
+
+## Design principles
+
+1. **One source of truth for thresholds.** Code reads `config/segmentation.toml` and never hard-codes cut-offs.
+2. **Raw data is sacred.** It is never edited; a checksum test detects any change.
+3. **No silent deletion or imputation.** Anything excluded is counted and explained.
+4. **Rates always come with segment size** and a confidence interval; small groups are flagged.
+5. **Associations, not causes.** Wording in all outputs reflects this.
+6. **Every number in the paper traces to code.** Nothing is typed in by hand.
+
+## Known limitations
+
+* Provenance, licence, and the exact meaning of `Exited` and `Year` are unconfirmed.
+* One snapshot, three countries: not a basis for conclusions about "European banking" generally.
+* No revenue or profit fields: balance-based figures are exposure proxies, not financial loss.
+* Requirement ambiguities and the choices made are logged in `docs/decisions_log.md`.
+
+## Troubleshooting (Windows)
+
+* **"No such file or directory" for `scripts\run_pipeline.py`, or "No module named churn_analytics":** extracting a zip can
+  create a folder inside a folder. Run `cd churn-analytics-project` until `dir` shows `src`, `tests`, `scripts` and `pytest.ini`.
+* **`pip.exe` / `pytest.exe` blocked by Device Guard:** call them through Python instead: `python -m pip install ...`, `python -m pytest`.
+* **"DLL load failed ... Application Control policy" when importing pandas:** `pyarrow` (installed as a dependency of Streamlit)
+  can be blocked. The project does not need it: `python -m pip uninstall pyarrow -y`. The dashboard (Phase 6) will need a different
+  route if it stays blocked (for example Streamlit Community Cloud or IT approval).
+* **Charts fail to load Matplotlib:** the tables and reports are unaffected; see the message printed by `scripts/make_figures.py`.

@@ -1,0 +1,181 @@
+# =============================================================================
+# segmentation.toml  -  single source of truth for thresholds and parameters
+# =============================================================================
+# Every segment boundary and statistical setting used by the project lives here.
+# Code must READ these values; it must never hard-code them. To test a different
+# threshold, edit this file and re-run - no code change needed.
+#
+# INTERVAL CONVENTION (important, beginner note)
+# Each binned variable is described by `lower_bounds` and `labels`.
+#   - A bin is LEFT-CLOSED: it includes its lower bound, excludes the next one.
+#   - `labels` always has ONE MORE entry than `lower_bounds`:
+#     the first label covers everything BELOW the first bound.
+#   - Because every bin starts exactly where the previous one ends, bins can
+#     never overlap and can never leave gaps, by construction.
+# Example: age lower_bounds = [30, 46, 61]
+#   Under 30 : age < 30      30-45 : 30 <= age < 46
+#   46-60    : 46 <= age < 61   61+ : age >= 61
+#
+# All thresholds below are CHOSEN ANALYTICAL THRESHOLDS for this project.
+# They are not universally established banking standards.
+# =============================================================================
+
+[project]
+name = "Customer Segmentation & Churn Pattern Analytics in European Banking"
+config_version = "0.5.0"
+
+[paths]
+# Relative to the project root.
+raw_data      = "data/raw/European_Bank.csv"
+raw_checksums = "data/raw/SHA256SUMS"
+processed_dir = "data/processed"
+figures_dir   = "reports/figures"
+tables_dir    = "reports/tables"
+
+[columns]
+target = "Exited"            # churn indicator; 1 = churned (ASSUMPTION - see docs/decisions_log.md D6)
+churn_value = 1
+identifier = "CustomerId"    # kept only for identification / validation
+# Never used as analytical features:
+excluded_from_features = ["CustomerId", "Surname", "Year"]
+# Year is treated as a possible metadata field (single value, 2025, in the raw file).
+metadata_columns = ["Year"]
+# Removed from the PROCESSED dataset (the raw file is never changed). Surname is personal
+# and non-analytical. Only COLUMNS are removed here - never customer records.
+remove_from_processed = ["Surname"]
+binary_columns = ["HasCrCard", "IsActiveMember", "Exited"]
+categorical_expected = { Geography = ["France", "Germany", "Spain"], Gender = ["Female", "Male"] }
+
+[schema]
+# The exact structure the raw file is expected to have. Validation compares the file to this.
+expected_columns = ["Year", "CustomerId", "Surname", "CreditScore", "Geography", "Gender",
+                    "Age", "Tenure", "Balance", "NumOfProducts", "HasCrCard",
+                    "IsActiveMember", "EstimatedSalary", "Exited"]
+integer_columns  = ["Year", "CustomerId", "CreditScore", "Age", "Tenure", "NumOfProducts",
+                    "HasCrCard", "IsActiveMember", "Exited"]
+float_columns    = ["Balance", "EstimatedSalary"]
+string_columns   = ["Surname", "Geography", "Gender"]
+
+[validation]
+# Plausibility bounds used ONLY to REPORT suspicious values in Phase 2.
+# Records outside these bounds are flagged and reported, never silently deleted.
+# These are assumptions to be confirmed, not facts about the data.
+age_min = 18
+age_max = 110
+credit_score_min = 300
+credit_score_max = 850
+tenure_min = 0
+balance_min = 0
+estimated_salary_min_exclusive = 0   # salary must be strictly greater than this
+num_products_min = 1
+# Discrete columns whose category sizes are checked against the small-group threshold.
+small_group_check_columns = ["Geography", "Gender", "NumOfProducts", "HasCrCard",
+                             "IsActiveMember", "Tenure"]
+
+# ----------------------------------------------------------------------------
+# Segmentation rules (approved by the project owner)
+# ----------------------------------------------------------------------------
+[segmentation.age]
+lower_bounds = [30, 46, 61]
+labels       = ["Under 30", "30-45", "46-60", "61+"]
+
+[segmentation.credit_score]
+lower_bounds = [580, 740]
+labels       = ["Low", "Medium", "High"]          # Low <580, Medium 580-739, High >=740
+
+[segmentation.tenure]
+lower_bounds = [3, 8]
+labels       = ["New", "Mid-term", "Long-term"]   # 0-2, 3-7, 8-10 years
+
+[segmentation.balance]
+# Zero balance is its own segment. Non-zero balances are split into Low and High
+# at the MEDIAN OF NON-ZERO BALANCES ONLY. The numeric threshold is computed from
+# the actual data at run time (never typed in here) and then recorded in outputs.
+#   Zero-balance : balance == 0
+#   Low-balance  : 0 < balance <= threshold
+#   High-balance : balance >  threshold
+method     = "median_of_nonzero"
+zero_label = "Zero-balance"
+low_label  = "Low-balance"
+high_label = "High-balance"
+
+# ----------------------------------------------------------------------------
+# Sensitivity checks (optional alternatives, reported separately)
+# ----------------------------------------------------------------------------
+[sensitivity.credit_score]
+# Data-driven alternative to the fixed bands above: equal-sized thirds.
+method   = "quantile"
+n_groups = 3
+labels   = ["Low (tercile)", "Medium (tercile)", "High (tercile)"]
+
+# ----------------------------------------------------------------------------
+# KPI settings (columns the KPI functions read; see docs/kpi_definitions.md)
+# ----------------------------------------------------------------------------
+[kpi]
+geography_column       = "Geography"        # Geographic Risk Index groups by this column
+engagement_column      = "IsActiveMember"   # Engagement Drop Indicator: 1 = active, 0 = inactive
+balance_column         = "Balance"          # used for the balance exposure PROXY (not revenue)
+balance_segment_column = "BalanceSegment"   # derived in Phase 2; High-Balance Churn Rate uses its high label
+
+# ----------------------------------------------------------------------------
+# Segment churn analysis settings (Phase 4)
+# ----------------------------------------------------------------------------
+[analysis]
+# Variables whose churn rates are compared (derived segments come from Phase 2).
+segment_variables = ["Geography", "Gender", "AgeBand", "CreditScoreBand", "TenureGroup",
+                     "BalanceSegment", "NumOfProducts", "HasCrCard", "IsActiveMember"]
+sensitivity_variable = "CreditScoreTercile"   # alternative to CreditScoreBand (see [sensitivity.credit_score])
+gender_column = "Gender"
+interaction_row = "Geography"                 # Geography x age drill-down
+interaction_col = "AgeBand"
+numeric_profile_columns = ["Age", "CreditScore", "Balance", "EstimatedSalary", "Tenure"]
+top_contribution_gaps = 8                     # how many segments to list in the "rate vs contribution" view
+
+# Plain-language reading of Cramer's V (effect size, 0 = no association, 1 = perfect).
+# With a binary outcome (churned or not) these are Cohen's conventional cut-offs for a
+# 2-column table. They are CONVENTIONS for describing size, not tests of importance.
+effect_size_cutoffs = [0.10, 0.30, 0.50]
+effect_size_labels  = ["negligible", "small", "medium", "large"]
+# Standardised mean difference (Cohen's d) uses its own conventional cut-offs, same labels.
+smd_cutoffs = [0.20, 0.50, 0.80]
+
+# Readable names for 0/1 columns in tables (keys are the raw values as text).
+[analysis.display_labels]
+HasCrCard      = { "0" = "No credit card", "1" = "Has credit card" }
+IsActiveMember = { "0" = "Inactive", "1" = "Active" }
+
+# ----------------------------------------------------------------------------
+# High-balance, engagement, salary and tenure analysis settings (Phase 5)
+# ----------------------------------------------------------------------------
+[balance_engagement]
+# Churn rate WITHIN High-balance customers, broken down by these variables.
+within_high_balance_variables = ["Geography", "Gender", "AgeBand", "TenureGroup", "NumOfProducts", "IsActiveMember"]
+# High-balance vs Low-balance (non-zero balances only), compared inside each level of these variables.
+stratify_high_vs_low_by = ["Geography", "AgeBand"]
+# Directly standardised High-vs-Low gaps: each inner list is one set of strata (a single variable or a combination).
+standardise_high_vs_low_by = [["Geography"], ["Geography", "AgeBand"]]
+# Non-zero balances are split into this many equal-sized groups (cut points are computed from the data).
+balance_quantile_groups = 5
+
+# Salary groups are computed from the data (equal-sized thirds) for the salary-vs-balance view.
+salary_column = "EstimatedSalary"
+salary_groups = 3
+salary_labels = ["Lower salary third", "Middle salary third", "Upper salary third"]
+
+# Engagement indicator and inactive-share tables are produced for these variables.
+engagement_segment_variables = ["Geography", "Gender", "AgeBand", "TenureGroup", "NumOfProducts", "BalanceSegment"]
+tenure_column = "Tenure"
+
+# Balance exposure PROXY (balance held by churned customers; NOT lost revenue) is broken down by these variables.
+exposure_variables = ["Geography", "Gender", "AgeBand", "NumOfProducts", "IsActiveMember", "BalanceSegment"]
+# Concentration: share of churned balance held by the top X% of churned customers (largest balances first).
+concentration_top_shares = [0.10, 0.20, 0.50]
+
+# ----------------------------------------------------------------------------
+# Statistical reporting settings (PROPOSED values - pending owner confirmation)
+# ----------------------------------------------------------------------------
+[statistics]
+confidence_level = 0.95
+ci_method = "wilson"            # interval for a single proportion (churn rate)
+small_group_threshold = 100     # n below this  -> flagged "small sample"
+min_reportable_group_size = 30  # n below this  -> rate withheld ("n/a"); count still shown

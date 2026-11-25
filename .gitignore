@@ -1,9 +1,26 @@
-.venv/
+# Python
 __pycache__/
-.pytest_cache/
 *.py[cod]
-artifacts/*.joblib
-reports/figures/*.png
-reports/*.csv
-reports/*.json
-.streamlit/
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Jupyter / OS / editors
+.ipynb_checkpoints/
+.DS_Store
+.idea/
+.vscode/
+
+# Data: raw CSV is NOT committed by default (provenance unconfirmed, contains surnames).
+# The checksum file IS committed so anyone can verify they have the right file.
+# To publish the CSV, delete the next line (see docs/decisions_log.md D10).
+data/raw/*.csv
+data/processed/*
+!data/processed/.gitkeep
+
+# Generated outputs (reproducible from code)
+reports/figures/*
+!reports/figures/.gitkeep
+reports/tables/*
+!reports/tables/.gitkeep
